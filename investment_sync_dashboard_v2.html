@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>湯博勳 投資追蹤儀表板（完全同步版）</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0a0a0a; color: #fff; padding: 20px; max-width: 1200px; margin: 0 auto; }
+
+  .header { text-align: center; margin-bottom: 24px; }
+  .header h1 { font-size: 24px; font-weight: 900; margin-bottom: 4px; }
+  .header p { color: #666; font-size: 12px; }
+  .sync-status { display: inline-block; padding: 6px 14px; border-radius: 20px; font-size: 11px; margin-top: 8px; border: 1px solid #3fffa822; color: #3fffa8; }
+  .sync-status.syncing { border-color: #ffb84d22; color: #ffb84d; }
+  .sync-status.offline { border-color: #ff5e5e22; color: #ff5e5e; }
+
+  /* 輸入區 */
+  .input-section { background: #111; border: 1px solid #2a2a2a; border-radius: 20px; padding: 24px; margin-bottom: 24px; }
+  .input-section h2 { font-size: 13px; font-weight: 700; color: #888; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 20px; }
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  @media(max-width:768px){ .input-grid { grid-template-columns: 1fr 1fr; } }
+  .input-group { display: flex; flex-direction: column; }
+  .input-group label { font-size: 10px; color: #666; margin-bottom: 6px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .input-group input { background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 10px; color: #fff; font-size: 14px; font-weight: 700; padding: 10px 12px; outline: none; }
+  .input-group input:focus { border-color: #3fffa8; }
+  
+  .date-row { display: flex; gap: 12px; margin-bottom: 16px; }
+  .date-row input { flex: 1; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 10px; color: #fff; padding: 10px 12px; outline: none; }
+  
+  .calc-preview { background: #0d1f0d; border: 1px solid #3fffa822; border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; display: none; }
+  .calc-preview .preview-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; }
+  .calc-preview .total-row { display: flex; justify-content: space-between; font-size: 14px; font-weight: 800; padding-top: 8px; margin-top: 8px; border-top: 1px solid #3fffa822; color: #3fffa8; }
+
+  .button-row { display: flex; gap: 12px; }
+  .btn { flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.2s; }
+  .btn-add { background: #3fffa8; color: #000; }
+  .btn-add:hover:not(:disabled) { opacity: 0.85; }
+  .btn-add:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status-text { text-align: center; font-size: 11px; color: #666; padding: 12px; min-height: 16px; }
+  .status-text.success { color: #3fffa8; }
+  .status-text.error { color: #ff5e5e; }
+  .status-text.syncing { color: #ffb84d; }
+
+  /* KPI */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: #111; border: 1px solid #1e1e1e; border-radius: 14px; padding: 14px; }
+  .kpi .kl { font-size: 9px; color: #555; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi .kv { font-size: 16px; font-weight: 800; }
+  .kpi .ks { font-size: 9px; color: #444; margin-top: 3px; }
+  .green { color: #3fffa8; }
+  .yellow { color: #ffb84d; }
+  .blue { color: #6b9fff; }
+  .red { color: #ff5e5e; }
+
+  /* Chart */
+  .chart-box { background: #111; border: 1px solid #1e1e1e; border-radius: 20px; padding: 20px; margin-bottom: 20px; }
+  .chart-box h2 { font-size: 10px; font-weight: 700; color: #555; margin-bottom: 14px; letter-spacing: 1.5px; text-transform: uppercase; }
+  .chart-wrap { position: relative; height: 240px; }
+
+  /* Table */
+  .table-box { background: #111; border: 1px solid #1e1e1e; border-radius: 20px; padding: 20px; }
+  .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .table-header h2 { font-size: 10px; font-weight: 700; color: #555; letter-spacing: 1.5px; text-transform: uppercase; }
+  .btn-clear { font-size: 10px; color: #ff5e5e; background: none; border: 1px solid #ff5e5e33; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; color: #444; font-size: 9px; padding: 0 8px 10px; letter-spacing: 0.5px; text-transform: uppercase; border-bottom: 1px solid #1a1a1a; }
+  td { padding: 8px; border-top: 1px solid #1a1a1a; }
+  tr:hover td { background: #161616; }
+  .empty-state { text-align: center; color: #333; padding: 32px; font-size: 12px; }
+
+  .note { text-align: center; color: #333; font-size: 10px; margin-top: 20px; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📈 湯博勳 投資追蹤儀表板</h1>
+  <p>本金 TWD 780,000 · Google Sheets 完全雙向同步</p>
+  <div class="sync-status" id="syncStatus">✅ 準備就緒</div>
+</div>
+
+<!-- 輸入區 -->
+<div class="input-section">
+  <h2>➕ 新增今日數據</h2>
+  <div class="date-row">
+    <label style="width:80px; display:flex; align-items:center;">日期</label>
+    <input type="date" id="inputDate" style="flex:1;">
+  </div>
+  <div class="input-grid">
+    <div class="input-group">
+      <label>永豐股票市值（TWD）</label>
+      <input type="number" id="sinopacStock" placeholder="798063" oninput="updatePreview()">
+    </div>
+    <div class="input-group">
+      <label>永豐可用金額（USD）</label>
+      <input type="number" id="sinopacUSD" placeholder="2804" oninput="updatePreview()">
+    </div>
+    <div class="input-group">
+      <label>永豐台幣餘額（TWD）</label>
+      <input type="number" id="sinopacTWD" placeholder="50632" oninput="updatePreview()">
+    </div>
+    <div class="input-group">
+      <label>IB 帳戶總值（USD）</label>
+      <input type="number" id="ibUSD" placeholder="4253" oninput="updatePreview()">
+    </div>
+  </div>
+
+  <div class="calc-preview" id="preview">
+    <div class="preview-row"><span>永豐股票</span><span id="pv1">—</span></div>
+    <div class="preview-row"><span>永豐可用金（USD→TWD）</span><span id="pv2">—</span></div>
+    <div class="preview-row"><span>永豐台幣餘額</span><span id="pv3">—</span></div>
+    <div class="preview-row"><span>IB帳戶（USD→TWD）</span><span id="pv4">—</span></div>
+    <div class="total-row"><span>今日總資產</span><span id="pvTotal">—</span></div>
+  </div>
+
+  <button class="btn btn-add" id="submitBtn" onclick="addAndSync()">💾 記錄 + 同步</button>
+  <div class="status-text" id="statusText"></div>
+</div>
+
+<!-- KPI -->
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="kl">最新總資產</div>
+    <div class="kv green" id="kpiTotal">—</div>
+    <div class="ks">TWD</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">總投入本金</div>
+    <div class="kv yellow">780,000</div>
+    <div class="ks">TWD</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">累計損益</div>
+    <div class="kv" id="kpiPnl">—</div>
+    <div class="ks">TWD</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">報酬率</div>
+    <div class="kv" id="kpiRoi">—</div>
+    <div class="ks">未實現</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">今日變化</div>
+    <div class="kv" id="kpiDaily">—</div>
+    <div class="ks">vs 昨日</div>
+  </div>
+  <div class="kpi">
+    <div class="kl">記錄天數</div>
+    <div class="kv blue" id="kpiDays">0</div>
+    <div class="ks">天</div>
+  </div>
+</div>
+
+<!-- 折線圖 -->
+<div class="chart-box">
+  <h2>總資產趨勢</h2>
+  <div class="chart-wrap"><canvas id="lineChart"></canvas></div>
+</div>
+
+<div class="chart-box">
+  <h2>每日報酬率變化</h2>
+  <div class="chart-wrap"><canvas id="roiChart"></canvas></div>
+</div>
+
+<!-- 歷史紀錄 -->
+<div class="table-box">
+  <div class="table-header">
+    <h2>📊 歷史紀錄</h2>
+    <button class="btn-clear" onclick="clearAll()">清除本機數據</button>
+  </div>
+  <div id="historyContent">
+    <div class="empty-state">還沒有紀錄，輸入今天的數據開始追蹤！</div>
+  </div>
+</div>
+
+<div class="note">
+  💾 數據存在瀏覽器本機 + 自動上傳到 Google Sheets<br>
+  ☁️ 每次按「記錄 + 同步」會同時保存到兩個地方<br>
+  📱 手機電腦都能輸入，數據自動跨設備同步 · 匯率固定 1 USD = 32 TWD
+</div>
+
+<script>
+const PRINCIPAL = 780000;
+const USD_RATE = 32;
+const STORAGE_KEY = 'tang_investment_tracker';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby8SIGdz65nghSUTAcB__Wyqas3D_WxQGQl5kgzFJ5cVSGxkp3mmQ7GfE4nzsnKl6VJ/exec';
+
+let lineChart, roiChart;
+
+// 計算總資產
+function calcTotal(stock, usd, twd, ib) {
+  return stock + (usd * USD_RATE) + twd + (ib * USD_RATE);
+}
+
+// 即時預覽
+function updatePreview() {
+  const stock = parseFloat(document.getElementById('sinopacStock').value) || 0;
+  const usd = parseFloat(document.getElementById('sinopacUSD').value) || 0;
+  const twd = parseFloat(document.getElementById('sinopacTWD').value) || 0;
+  const ib = parseFloat(document.getElementById('ibUSD').value) || 0;
+  if (!stock && !usd && !twd && !ib) { document.getElementById('preview').style.display='none'; return; }
+  document.getElementById('preview').style.display='block';
+  const total = calcTotal(stock, usd, twd, ib);
+  const pnl = total - PRINCIPAL;
+  const roi = (pnl / PRINCIPAL * 100).toFixed(2);
+  document.getElementById('pv1').textContent = 'TWD ' + stock.toLocaleString();
+  document.getElementById('pv2').textContent = 'TWD ' + (usd * USD_RATE).toLocaleString();
+  document.getElementById('pv3').textContent = 'TWD ' + twd.toLocaleString();
+  document.getElementById('pv4').textContent = 'TWD ' + (ib * USD_RATE).toLocaleString();
+  document.getElementById('pvTotal').textContent = 'TWD ' + Math.round(total).toLocaleString();
+}
+
+// 記錄 + 同步
+async function addAndSync() {
+  const date = document.getElementById('inputDate').value;
+  const stock = parseFloat(document.getElementById('sinopacStock').value);
+  const usd = parseFloat(document.getElementById('sinopacUSD').value);
+  const twd = parseFloat(document.getElementById('sinopacTWD').value);
+  const ib = parseFloat(document.getElementById('ibUSD').value);
+
+  if (!date || !stock) { alert('請填入日期和庫存總市值！'); return; }
+
+  const submitBtn = document.getElementById('submitBtn');
+  const statusText = document.getElementById('statusText');
+  
+  submitBtn.disabled = true;
+  statusText.textContent = '⏳ 同步中...';
+  statusText.className = 'status-text syncing';
+  document.getElementById('syncStatus').textContent = '⏳ 同步中...';
+  document.getElementById('syncStatus').className = 'sync-status syncing';
+
+  try {
+    // 本機存儲
+    const data = loadData();
+    const idx = data.findIndex(d => d.date === date);
+    const entry = { date, stock, usd: usd||0, twd: twd||0, ib: ib||0, total: calcTotal(stock, usd||0, twd||0, ib||0) };
+    if (idx >= 0) { data[idx] = entry; } else { data.push(entry); }
+    data.sort((a,b) => a.date.localeCompare(b.date));
+    saveData(data);
+
+    // 上傳到 Google Sheets
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ date, stock, usd: usd||0, twd: twd||0, ib: ib||0 })
+    });
+
+    const result = await response.json();
+    
+    if (result.success) {
+      statusText.textContent = '✅ 已同步到 Google Sheets';
+      statusText.className = 'status-text success';
+      document.getElementById('syncStatus').textContent = '✅ 已同步';
+      document.getElementById('syncStatus').className = 'sync-status';
+    } else {
+      statusText.textContent = '⚠️ 本機已保存，Google Sheets 同步失敗（' + result.error + '）';
+      statusText.className = 'status-text error';
+      document.getElementById('syncStatus').textContent = '⚠️ 本機已保存';
+      document.getElementById('syncStatus').className = 'sync-status offline';
+    }
+
+    setTimeout(() => {
+      statusText.textContent = '';
+      document.getElementById('syncStatus').textContent = '✅ 準備就緒';
+      document.getElementById('syncStatus').className = 'sync-status';
+    }, 3000);
+    
+    ['sinopacStock','sinopacUSD','sinopacTWD','ibUSD'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('preview').style.display='none';
+    render();
+  } catch (err) {
+    statusText.textContent = '❌ 錯誤：' + err.message;
+    statusText.className = 'status-text error';
+    document.getElementById('syncStatus').textContent = '❌ 同步失敗';
+    document.getElementById('syncStatus').className = 'sync-status offline';
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch(e) { return []; }
+}
+function saveData(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+
+function clearAll() {
+  if (confirm('確定要清除所有本機紀錄嗎？')) { localStorage.removeItem(STORAGE_KEY); render(); }
+}
+
+function render() {
+  const data = loadData();
+  renderKPI(data);
+  renderCharts(data);
+  renderHistory(data);
+}
+
+function renderKPI(data) {
+  if (!data.length) return;
+  const last = data[data.length-1];
+  const prev = data.length > 1 ? data[data.length-2] : null;
+  const pnl = last.total - PRINCIPAL;
+  const roi = (pnl / PRINCIPAL * 100).toFixed(2);
+  const daily = prev ? last.total - prev.total : 0;
+  const sign = v => v >= 0 ? '+' : '';
+
+  document.getElementById('kpiTotal').textContent = Math.round(last.total).toLocaleString();
+  document.getElementById('kpiPnl').textContent = sign(pnl) + Math.round(pnl).toLocaleString();
+  document.getElementById('kpiPnl').className = 'kv ' + (pnl >= 0 ? 'green' : 'red');
+  document.getElementById('kpiRoi').textContent = sign(roi) + roi + '%';
+  document.getElementById('kpiRoi').className = 'kv ' + (roi >= 0 ? 'green' : 'red');
+  document.getElementById('kpiDaily').textContent = prev ? sign(daily) + Math.round(daily).toLocaleString() : '—';
+  document.getElementById('kpiDaily').className = 'kv ' + (!prev ? '' : daily >= 0 ? 'green' : 'red');
+  document.getElementById('kpiDays').textContent = data.length;
+}
+
+function renderCharts(data) {
+  const labels = data.map(d => d.date.slice(5));
+  const totals = data.map(d => Math.round(d.total));
+  const rois = data.map(d => +((d.total - PRINCIPAL) / PRINCIPAL * 100).toFixed(2));
+
+  if (lineChart) lineChart.destroy();
+  if (roiChart) roiChart.destroy();
+
+  const commonOptions = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#666', font:{size:10} }, grid: { color: '#1a1a1a' } },
+    }
+  };
+
+  lineChart = new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: totals,
+        borderColor: '#3fffa8', backgroundColor: '#3fffa808',
+        borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#3fffa8',
+        fill: true, tension: 0.3
+      }, {
+        data: Array(data.length).fill(PRINCIPAL),
+        borderColor: '#ffb84d55', borderWidth: 1.5, borderDash: [4,4],
+        pointRadius: 0, fill: false
+      }]
+    },
+    options: { ...commonOptions,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' TWD ' + ctx.raw.toLocaleString() } }
+      },
+      scales: { ...commonOptions.scales,
+        y: { ticks: { color: '#666', callback: v => (v/10000).toFixed(0)+'萬' }, grid: { color: '#1a1a1a' } }
+      }
+    }
+  });
+
+  roiChart = new Chart(document.getElementById('roiChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: rois,
+        borderColor: '#6b9fff', backgroundColor: '#6b9fff08',
+        borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#6b9fff',
+        fill: true, tension: 0.3
+      }]
+    },
+    options: { ...commonOptions,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ' ' + ctx.raw + '%' } }
+      },
+      scales: { ...commonOptions.scales,
+        y: { ticks: { color: '#666', callback: v => v + '%' }, grid: { color: '#1a1a1a' } }
+      }
+    }
+  });
+}
+
+function renderHistory(data) {
+  const el = document.getElementById('historyContent');
+  if (!data.length) { el.innerHTML = '<div class="empty-state">還沒有紀錄，輸入今天的數據開始追蹤！</div>'; return; }
+  const reversed = [...data].reverse();
+  let html = `<table><thead><tr>
+    <th>日期</th><th>永豐股票</th><th>可用金USD</th><th>台幣餘額</th><th>IB USD</th><th>總資產</th><th>損益</th><th>報酬率</th>
+  </tr></thead><tbody>`;
+  reversed.forEach((d, i) => {
+    const pnl = d.total - PRINCIPAL;
+    const roi = (pnl/PRINCIPAL*100).toFixed(2);
+    const sign = v => v >= 0 ? '+' : '';
+    const cls = v => v >= 0 ? 'green' : 'red';
+    html += `<tr>
+      <td><strong>${d.date}</strong></td>
+      <td>${d.stock.toLocaleString()}</td>
+      <td>${d.usd}</td>
+      <td>${d.twd.toLocaleString()}</td>
+      <td>${d.ib}</td>
+      <td><strong>${Math.round(d.total).toLocaleString()}</strong></td>
+      <td class="${cls(pnl)}">${sign(pnl)}${Math.round(pnl).toLocaleString()}</td>
+      <td class="${cls(roi)}">${sign(roi)}${roi}%</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+// 初始化
+document.getElementById('inputDate').value = new Date().toISOString().slice(0,10);
+document.getElementById('sinopacStock').value = 798063;
+document.getElementById('sinopacUSD').value = 2804;
+document.getElementById('sinopacTWD').value = 50632;
+document.getElementById('ibUSD').value = 4253;
+updatePreview();
+render();
+</script>
+</body>
+</html>
